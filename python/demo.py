@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-RBAC Framework v2 Demo
-Demonstrates: resource-action matrix, composite roles, admin exclusions,
-org hierarchy, and UI-exportable permission manifests.
+RBAC Framework v3 Demo — ConstructivIQ
+Demonstrates: subscription + project scoped permissions, construction industry roles,
+admin exclusions, per-project grants, and UI manifest export.
 """
 
 import json
@@ -15,33 +15,38 @@ from python.engine import RBACEngine
 
 
 def header(title: str):
-    print(f"\n{'=' * 80}")
+    print(f"\n{'=' * 90}")
     print(f"  {title}")
-    print(f"{'=' * 80}")
+    print(f"{'=' * 90}")
 
 
 def main():
     config_path = Path(__file__).resolve().parent.parent / "schema" / "rbac_model.json"
     engine = RBACEngine(config_path)
 
-    resources = engine.list_resources()
-    actions_all = ["read", "create", "update", "delete", "upload", "manage"]
+    actions_all = engine._actions
+    PROJECT = "project_alpha"
 
-    # ── 1. ROLE PERMISSION MATRIX ────────────────────────────────────
-    header("ROLE PERMISSION MATRIX (D=direct, I=inherited, -=denied)")
-    role_matrix = engine.export_role_matrix()
+    # ── 1. PROJECT ROLE MATRIX ───────────────────────────────────────
+    header("PROJECT ROLE PERMISSION MATRIX (D=direct, I=inherited)")
+    role_matrix = engine.export_role_matrix(scope="project")
+    project_resources = {n: r for n, r in engine.list_resources().items() if r.scope == "project"}
+
     for role_name, info in role_matrix.items():
         inherits = f" (inherits: {', '.join(info['inherits'])})" if info["inherits"] else ""
-        print(f"\n  [{role_name.upper()}]{inherits}")
+        user_type = f" [{info['user_type']}]" if info["user_type"] else ""
+        print(f"\n  [{role_name.upper()}]{user_type}{inherits}")
         print(f"  {info['description']}")
-        print(f"  {'Resource':<14}", end="")
+        print(f"  {'Resource':<26}", end="")
         for a in actions_all:
-            print(f"{a:<10}", end="")
+            print(f"{a[:4]:<6}", end="")
         print()
-        print(f"  {'-' * 74}")
-        for r_name in resources:
-            perms = info["permissions"][r_name]
-            print(f"  {r_name:<14}", end="")
+        print(f"  {'-' * 92}")
+        for r_name in project_resources:
+            perms = info["permissions"].get(r_name, {})
+            if not perms:
+                continue
+            print(f"  {r_name:<26}", end="")
             for a in actions_all:
                 val = perms.get(a, False)
                 if val == "direct":
@@ -50,58 +55,98 @@ def main():
                     symbol = "I"
                 else:
                     symbol = "-"
-                print(f"{symbol:<10}", end="")
+                print(f"{symbol:<6}", end="")
             print()
 
-    # ── 2. USER PERMISSION MATRIX ────────────────────────────────────
-    header("USER PERMISSION MATRIX (Y=yes, X=excluded, -=no)")
+    # ── 2. USER PROJECT PERMISSIONS ──────────────────────────────────
+    header(f"USER PERMISSIONS IN '{PROJECT}'")
     users = engine.list_users()
+
     for uid, user in users.items():
-        effective = engine.get_effective_permissions(user)
-        exclusion_keys = {f"{a}:{r}" for r, actions in user.exclusions.items() for a in actions}
-        grant_keys = {f"{a}:{r}" for r, actions in user.grants.items() for a in actions}
+        assignment = user.project_assignments.get(PROJECT)
+        if not assignment:
+            continue
 
-        roles_str = ", ".join(user.roles)
-        extras = []
-        if grant_keys:
-            extras.append(f"+grants:{','.join(sorted(grant_keys))}")
-        if exclusion_keys:
-            extras.append(f"-excluded:{','.join(sorted(exclusion_keys))}")
-        extra_str = f"  ({' '.join(extras)})" if extras else ""
+        effective = engine.get_effective_permissions(uid, PROJECT)
+        print(f"\n  [{uid.upper()}] {user.display_name} -- role: {assignment.role}")
 
-        print(f"\n  [{uid.upper()}] {user.display_name} -- roles: {roles_str}{extra_str}")
-        if user.reports_to:
-            chain = engine.get_management_chain(uid)
-            print(f"  Org chain: {uid} -> {' -> '.join(chain)}")
+        exclusion_info = user.exclusions.get(PROJECT, {})
+        grant_info = user.grants.get(PROJECT, {})
+        if exclusion_info:
+            print(f"    Exclusions: {dict({r: list(a) for r, a in exclusion_info.items()})}")
+        if grant_info:
+            print(f"    Grants: {dict({r: list(a) for r, a in grant_info.items()})}")
 
-        print(f"  {'Resource':<14}", end="")
+        print(f"    {'Resource':<26}", end="")
         for a in actions_all:
-            print(f"{a:<10}", end="")
+            print(f"{a[:4]:<6}", end="")
         print()
-        print(f"  {'-' * 74}")
-        for r_name, resource in resources.items():
-            print(f"  {r_name:<14}", end="")
+        print(f"    {'-' * 88}")
+        for r_name, resource in project_resources.items():
             user_actions = effective.get(r_name, set())
+            has_any = any(a in user_actions or a in exclusion_info.get(r_name, set()) for a in resource.allowed_actions)
+            if not has_any:
+                continue
+            print(f"    {r_name:<26}", end="")
             for a in actions_all:
                 if a not in resource.allowed_actions:
                     symbol = "."
-                elif a in user.exclusions.get(r_name, set()):
+                elif a in exclusion_info.get(r_name, set()):
                     symbol = "X"
                 elif a in user_actions:
                     symbol = "Y"
                 else:
                     symbol = "-"
-                print(f"{symbol:<10}", end="")
+                print(f"{symbol:<6}", end="")
             print()
 
-    # ── 3. PERMISSION DEPENDENCY CHAINS ──────────────────────────────
+    # ── 3. SUBSCRIPTION PERMISSIONS ──────────────────────────────────
+    header("SUBSCRIPTION-LEVEL PERMISSIONS")
+    sub_resources = {n: r for n, r in engine.list_resources().items() if r.scope == "subscription"}
+
+    for uid, user in users.items():
+        if not user.subscription_role:
+            continue
+        effective = engine.get_effective_permissions(uid)
+        print(f"\n  [{uid.upper()}] {user.display_name} -- role: {user.subscription_role}")
+        for r_name in sub_resources:
+            actions = effective.get(r_name, set())
+            if actions:
+                print(f"    {r_name}: {', '.join(sorted(actions))}")
+
+    # ── 4. PERMISSION CHECKS ────────────────────────────────────────
+    header("PERMISSION CHECKS & EXPLANATIONS")
+    checks = [
+        ("sarah", "create", "submittals", PROJECT),
+        ("mike", "create", "submittals", PROJECT),
+        ("priya", "approve", "workflows", PROJECT),
+        ("james", "download", "materials", PROJECT),
+        ("lisa", "download", "risk_reports", PROJECT),
+        ("sarah", "manage", "subscription_users", None),
+        ("mike", "delete", "subscription_users", None),
+        ("raj", "approve", "submittals", PROJECT),
+        ("tom", "create", "submittals", PROJECT),
+        ("sarah", "manage", "workflow_templates", PROJECT),
+    ]
+    for uid, action, resource, proj in checks:
+        result = engine.can(uid, action, resource, proj)
+        explanation = engine.explain(uid, action, resource, proj)
+        status = "YES" if result else "NO "
+        print(f"  [{status}] {explanation}")
+
+    # ── 5. UI MANIFEST ──────────────────────────────────────────────
+    header("UI MANIFEST EXPORT (priya in project_alpha)")
+    manifest = engine.export_ui_manifest("priya", PROJECT)
+    print(json.dumps(manifest, indent=2))
+
+    # ── 6. DEPENDENCY CHAINS ────────────────────────────────────────
     header("PERMISSION DEPENDENCY CHAINS")
     dep_examples = [
-        ("manage", "users"),
-        ("upload", "reports"),
-        ("delete", "projects"),
-        ("manage", "settings"),
-        ("upload", "files"),
+        ("manage", "project_users"),
+        ("manage", "workflows"),
+        ("manage", "schedules"),
+        ("archive", "submittals"),
+        ("manage", "subscription_users"),
     ]
     for action, resource in dep_examples:
         deps = engine.get_dependency_chain(action, resource)
@@ -109,55 +154,46 @@ def main():
             print(f"\n  {action}:{resource} requires:")
             for dep in deps:
                 print(f"    -> {dep}")
-        else:
-            print(f"\n  {action}:{resource} -- no dependencies")
 
-    # ── 4. ORG HIERARCHY ─────────────────────────────────────────────
-    header("ORG HIERARCHY")
-    def print_tree(uid, depth=0):
-        user = engine.get_user(uid)
-        indent = "  " + "    " * depth
-        roles_str = ", ".join(user.roles)
-        print(f"{indent}{user.display_name} ({uid}) [{roles_str}]")
-        for sub in engine.get_subordinates(uid, recursive=False):
-            print_tree(sub, depth + 1)
-
-    # Find root users (no reports_to)
-    roots = [uid for uid, u in users.items() if u.reports_to is None]
-    for root in roots:
-        print_tree(root)
-
-    # ── 5. ACCESS EXPLANATIONS ───────────────────────────────────────
-    header("ACCESS EXPLANATIONS")
-    explain_cases = [
-        ("alice", "manage", "users"),
-        ("bob", "delete", "users"),
-        ("carol", "read", "audit_logs"),
-        ("dave", "delete", "reports"),
-        ("eve", "create", "reports"),
-        ("frank", "read", "audit_logs"),
-        ("grace", "upload", "files"),
-        ("grace", "read", "settings"),
-        ("bob", "manage", "dashboard"),
+    # ── 7. COMPARISON: OLD vs NEW ───────────────────────────────────
+    header("MIGRATION: OLD PERMISSION ENUM -> NEW RBAC")
+    mapping = [
+        ("ViewProjectList",                     "list",     "projects",              None),
+        ("AddProjectUser",                      "create",   "project_users",         PROJECT),
+        ("EditProjectDetail",                   "update",   "project_settings",      PROJECT),
+        ("CreateSubmittal",                     "create",   "submittals",            PROJECT),
+        ("InlineEditSubmittal",                 "update",   "submittals",            PROJECT),
+        ("SubmittalWorkflow",                   "approve",  "workflows",             PROJECT),
+        ("AddTradePartner",                     "create",   "trade_partners",        PROJECT),
+        ("AddAttachment",                       "upload",   "attachments",           PROJECT),
+        ("AddEditCalendar",                     "manage",   "calendars",             PROJECT),
+        ("ViewLinkingPage",                     "read",     "linking",               PROJECT),
+        ("EditLinkingPage",                     "update",   "linking",               PROJECT),
+        ("CreateMaterial",                      "create",   "materials",             PROJECT),
+        ("EditMaterialCharacteristics",         "update",   "material_characteristics", PROJECT),
+        ("EditMaterialDBOffset",                "update",   "material_dateblock",    PROJECT),
+        ("ImportSchedule",                      "upload",   "schedules",             PROJECT),
+        ("MakeActiveSchedule",                  "manage",   "schedules",             PROJECT),
+        ("DeleteMaterialAttachment",            "delete",   "attachments",           PROJECT),
+        ("ViewProjectReports",                  "read",     "risk_reports",          PROJECT),
+        ("UploadSpecSectionFile",               "upload",   "spec_sections",         PROJECT),
+        ("CreateMaterialComment",               "create",   "material_comments",     PROJECT),
+        ("ChangeMaterialTemplate",              "update",   "material_templates",    PROJECT),
+        ("EditWorkflowTemplate",                "manage",   "workflow_templates",    PROJECT),
+        ("EditRiskThreshold",                   "update",   "risk_thresholds",       PROJECT),
+        ("BidPackageWrite",                     "create",   "bid_packages",          PROJECT),
+        ("DesignPackageWrite",                  "create",   "design_packages",       PROJECT),
+        ("addProjectIntegration",               "create",   "integrations",          PROJECT),
+        ("changeProjectIntegration",            "update",   "integrations",          PROJECT),
+        ("RequestLeadTime",                     "create",   "lead_time_requests",    PROJECT),
     ]
-    for uid, action, resource in explain_cases:
-        print(f"  {engine.explain(uid, action, resource)}")
 
-    # ── 6. UI MANIFEST EXPORT ────────────────────────────────────────
-    header("UI MANIFEST EXPORT (sample: bob)")
-    manifest = engine.export_ui_manifest("bob")
-    print(json.dumps(manifest, indent=2))
-
-    # ── 7. COMPOSITE ROLE DEMO ───────────────────────────────────────
-    header("COMPOSITE ROLE DEMO: grace (contributor + user_manager)")
-    grace = engine.get_user("grace")
-    effective = engine.get_effective_permissions(grace)
-    print(f"\n  Roles: {', '.join(grace.roles)}")
-    print(f"  Extra grants: {dict(grace.grants)}")
-    print(f"  Exclusions: {dict(grace.exclusions)}")
-    print(f"\n  Effective permissions:")
-    for r in sorted(effective):
-        print(f"    {r}: {', '.join(sorted(effective[r]))}")
+    print(f"\n  {'Old Enum':<40} {'New Permission':<35} {'GC Admin':<10}")
+    print(f"  {'-' * 85}")
+    for old_name, action, resource, proj in mapping:
+        new_perm = f"{action}:{resource}"
+        can_gc = "YES" if engine.can("sarah", action, resource, proj) else "NO"
+        print(f"  {old_name:<40} {new_perm:<35} {can_gc:<10}")
 
 
 if __name__ == "__main__":

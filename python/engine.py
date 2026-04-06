@@ -6,22 +6,27 @@ from .exceptions import (
     UnknownPermissionError,
     UnknownRoleError,
 )
-from .models import Resource, Role, User
+from .models import Resource, Role, User, ProjectAssignment
 
 
 class RBACEngine:
     """
-    Core RBAC engine supporting:
-    - Resource-action permission matrix (read, create, update, delete, upload, manage)
-    - Permission dependencies (delete:reports requires read:reports)
-    - Role inheritance + composition (team_lead = editor + user_manager)
-    - Per-user grants and exclusions (admin can strip permissions)
-    - Org hierarchy (reports_to chain, manager inherits subordinate scope)
-    - UI-exportable permission manifest
+    Enterprise RBAC engine for ConstructivIQ.
+    Supports:
+    - Subscription-level + project-level scoped permissions
+    - Resource-action matrix with 11 actions
+    - Permission dependencies with transitive resolution
+    - Role inheritance + composition (DAG with cycle detection)
+    - Per-user per-project grants and exclusions
+    - Org hierarchy
+    - UI-exportable permission manifests
     """
 
-    def __init__(self, config_path: str | Path):
-        self._config = self._load_config(config_path)
+    def __init__(self, config_path: str | Path | None = None, config: dict | None = None):
+        if config:
+            self._config = config
+        else:
+            self._config = self._load_config(config_path)
         self._actions: list[str] = self._config["actions"]
         self._resources: dict[str, Resource] = {}
         self._perm_deps: dict[str, list[str]] = {}
@@ -45,78 +50,75 @@ class RBACEngine:
             self._resources[name] = Resource(
                 name=name,
                 description=info.get("description", ""),
+                scope=info.get("scope", "project"),
                 allowed_actions=info["allowed_actions"],
             )
 
     def _build_perm_deps(self):
         for perm_key, deps in self._config.get("permission_dependencies", {}).items():
-            self._validate_perm_key(perm_key)
-            for dep in deps:
-                self._validate_perm_key(dep)
             self._perm_deps[perm_key] = deps
 
     def _build_roles(self):
         raw_roles = self._config["roles"]
         for name, info in raw_roles.items():
-            for parent in info.get("inherits", []):
-                if parent not in raw_roles:
-                    raise UnknownRoleError(f"Role '{name}' inherits unknown role '{parent}'")
             direct = {}
             for resource, actions in info.get("permissions", {}).items():
-                if resource not in self._resources:
-                    raise UnknownPermissionError(f"Role '{name}' references unknown resource '{resource}'")
                 direct[resource] = set(actions)
             self._roles[name] = Role(
                 name=name,
                 description=info.get("description", ""),
+                scope=info.get("scope", "project"),
+                user_type=info.get("user_type", ""),
+                managed_by=info.get("managed_by", ""),
                 inherits=info.get("inherits", []),
                 direct_permissions=direct,
             )
 
     def _build_users(self):
         for uid, info in self._config.get("users", {}).items():
-            for role_name in info.get("roles", []):
-                if role_name not in self._roles:
-                    raise UnknownRoleError(f"User '{uid}' has unknown role '{role_name}'")
-            grants = {r: set(a) for r, a in info.get("grants", {}).items()}
-            exclusions = {r: set(a) for r, a in info.get("exclusions", {}).items()}
-            reports_to = info.get("reports_to")
-            if reports_to and reports_to not in self._config.get("users", {}):
-                raise ValueError(f"User '{uid}' reports_to unknown user '{reports_to}'")
+            # Project assignments
+            assignments = {}
+            for proj_id, proj_info in info.get("project_assignments", {}).items():
+                assignments[proj_id] = ProjectAssignment(
+                    project_id=proj_id,
+                    role=proj_info["role"],
+                )
+
+            # Per-project grants
+            grants = {}
+            for proj_id, resources in info.get("grants", {}).items():
+                grants[proj_id] = {r: set(a) for r, a in resources.items()}
+
+            # Per-project exclusions
+            exclusions = {}
+            for proj_id, resources in info.get("exclusions", {}).items():
+                exclusions[proj_id] = {r: set(a) for r, a in resources.items()}
+
             self._users[uid] = User(
                 id=uid,
                 display_name=info.get("display_name", uid),
-                roles=info.get("roles", []),
+                email=info.get("email", ""),
+                subscription_role=info.get("subscription_role"),
+                project_assignments=assignments,
                 grants=grants,
                 exclusions=exclusions,
-                reports_to=reports_to,
+                reports_to=info.get("reports_to"),
             )
-
-    def _validate_perm_key(self, key: str):
-        parts = key.split(":", 1)
-        if len(parts) != 2:
-            raise UnknownPermissionError(f"Invalid permission format '{key}', expected 'action:resource'")
-        action, resource = parts
-        if resource not in self._resources:
-            raise UnknownPermissionError(f"Unknown resource '{resource}' in permission '{key}'")
 
     # ── Dependency Resolution ────────────────────────────────────────
 
     def _resolve_perm_deps(self, action: str, resource: str, ancestors=None, cache=None):
-        """Resolve transitive dependencies for a single action:resource."""
         key = f"{action}:{resource}"
         if cache is None:
             cache = {}
         if ancestors is None:
             ancestors = set()
-
         if key in cache:
             return cache[key]
         if key in ancestors:
-            raise CyclicDependencyError(f"Cycle in permission dependencies involving '{key}'")
+            raise CyclicDependencyError(f"Cycle in permission dependencies: {key}")
 
         new_ancestors = ancestors | {key}
-        # result is dict: resource -> set of actions
         result = {resource: {action}}
 
         for dep_key in self._perm_deps.get(key, []):
@@ -129,32 +131,27 @@ class RBACEngine:
         return result
 
     def _resolve_role_perms(self, role_name: str, ancestors=None, cache=None):
-        """Resolve effective permissions for a role (inheritance + deps)."""
         if cache is None:
             cache = {}
         if ancestors is None:
             ancestors = set()
-
         if role_name in cache:
             return cache[role_name]
         if role_name in ancestors:
-            raise CyclicDependencyError(f"Cycle in role inheritance involving '{role_name}'")
+            raise CyclicDependencyError(f"Cycle in role inheritance: {role_name}")
 
         new_ancestors = ancestors | {role_name}
         role = self._roles[role_name]
         merged: dict[str, set] = {}
 
-        # Inherited roles
         for parent in role.inherits:
             parent_perms = self._resolve_role_perms(parent, new_ancestors, cache)
             for r, actions in parent_perms.items():
                 merged.setdefault(r, set()).update(actions)
 
-        # Direct permissions
         for r, actions in role.direct_permissions.items():
             merged.setdefault(r, set()).update(actions)
 
-        # Expand dependencies for every collected permission
         dep_cache = {}
         expanded: dict[str, set] = {}
         for r, actions in merged.items():
@@ -173,10 +170,165 @@ class RBACEngine:
                 role_name, cache=cache
             )
 
+    # ── Evaluation ───────────────────────────────────────────────────
+
+    def can(self, user_id: str, action: str, resource: str, project_id: str | None = None) -> bool:
+        """
+        Check permission. For project-scoped resources, project_id is required.
+        For subscription-scoped resources, project_id is ignored.
+        """
+        user = self._users.get(user_id)
+        if not user:
+            return False
+
+        resource_obj = self._resources.get(resource)
+        if not resource_obj:
+            return False
+
+        if resource_obj.scope == "subscription":
+            return self._can_subscription(user, action, resource)
+        else:
+            if not project_id:
+                return False
+            return self._can_project(user, action, resource, project_id)
+
+    def _can_subscription(self, user: User, action: str, resource: str) -> bool:
+        if not user.subscription_role:
+            return False
+        role = self._roles.get(user.subscription_role)
+        if not role:
+            return False
+        return action in role.effective_permissions.get(resource, set())
+
+    def _can_project(self, user: User, action: str, resource: str, project_id: str) -> bool:
+        # 1. Exclusions (per project)
+        proj_exclusions = user.exclusions.get(project_id, {})
+        if action in proj_exclusions.get(resource, set()):
+            return False
+
+        # 2. Grants (per project)
+        proj_grants = user.grants.get(project_id, {})
+        if action in proj_grants.get(resource, set()):
+            return True
+
+        # 3. Role-based
+        assignment = user.project_assignments.get(project_id)
+        if not assignment:
+            return False
+        role = self._roles.get(assignment.role)
+        if not role:
+            return False
+        return action in role.effective_permissions.get(resource, set())
+
+    def get_effective_permissions(self, user_id: str, project_id: str | None = None) -> dict[str, set]:
+        """Get all effective permissions for a user in a given scope."""
+        user = self._users.get(user_id)
+        if not user:
+            return {}
+
+        if project_id:
+            return self._get_project_perms(user, project_id)
+        else:
+            return self._get_subscription_perms(user)
+
+    def _get_subscription_perms(self, user: User) -> dict[str, set]:
+        if not user.subscription_role:
+            return {}
+        role = self._roles.get(user.subscription_role)
+        if not role:
+            return {}
+        return {r: set(a) for r, a in role.effective_permissions.items()}
+
+    def _get_project_perms(self, user: User, project_id: str) -> dict[str, set]:
+        perms: dict[str, set] = {}
+
+        assignment = user.project_assignments.get(project_id)
+        if assignment:
+            role = self._roles.get(assignment.role)
+            if role:
+                for r, actions in role.effective_permissions.items():
+                    perms.setdefault(r, set()).update(actions)
+
+        for r, actions in user.grants.get(project_id, {}).items():
+            perms.setdefault(r, set()).update(actions)
+
+        for r, actions in user.exclusions.get(project_id, {}).items():
+            if r in perms:
+                perms[r] -= actions
+                if not perms[r]:
+                    del perms[r]
+
+        return perms
+
+    # ── UI Export ────────────────────────────────────────────────────
+
+    def export_ui_manifest(self, user_id: str, project_id: str | None = None) -> dict:
+        """Export flat permission manifest for frontend."""
+        user = self._users.get(user_id)
+        if not user:
+            return {}
+
+        effective = self.get_effective_permissions(user_id, project_id)
+        scope = "project" if project_id else "subscription"
+
+        permissions = {}
+        for r_name, resource in self._resources.items():
+            if resource.scope != scope:
+                continue
+            action_map = {}
+            user_actions = effective.get(r_name, set())
+            for action in resource.allowed_actions:
+                action_map[action] = action in user_actions
+            permissions[r_name] = action_map
+
+        result = {
+            "user": user.id,
+            "display_name": user.display_name,
+            "scope": scope,
+            "permissions": permissions,
+        }
+        if project_id:
+            assignment = user.project_assignments.get(project_id)
+            result["project_id"] = project_id
+            result["project_role"] = assignment.role if assignment else None
+        else:
+            result["subscription_role"] = user.subscription_role
+
+        return result
+
+    def export_role_matrix(self, scope: str | None = None) -> dict:
+        """Export role-resource-action matrix for admin panel."""
+        matrix = {}
+        for role_name, role in self._roles.items():
+            if scope and role.scope != scope:
+                continue
+            role_perms = {}
+            for r_name, resource in self._resources.items():
+                if resource.scope != role.scope:
+                    continue
+                action_map = {}
+                effective = role.effective_permissions.get(r_name, set())
+                direct = role.direct_permissions.get(r_name, set())
+                for action in resource.allowed_actions:
+                    if action in direct:
+                        action_map[action] = "direct"
+                    elif action in effective:
+                        action_map[action] = "inherited"
+                    else:
+                        action_map[action] = False
+                role_perms[r_name] = action_map
+            matrix[role_name] = {
+                "description": role.description,
+                "scope": role.scope,
+                "user_type": role.user_type,
+                "inherits": role.inherits,
+                "permissions": role_perms,
+            }
+        return matrix
+
     # ── Hierarchy ────────────────────────────────────────────────────
 
     def get_subordinates(self, user_id: str, recursive=True) -> list[str]:
-        """Get direct (or all recursive) subordinates of a user."""
         direct = [uid for uid, u in self._users.items() if u.reports_to == user_id]
         if not recursive:
             return direct
@@ -187,7 +339,6 @@ class RBACEngine:
         return result
 
     def get_management_chain(self, user_id: str) -> list[str]:
-        """Get the chain of managers from user up to root."""
         chain = []
         current = self._users.get(user_id)
         visited = set()
@@ -199,150 +350,48 @@ class RBACEngine:
             current = self._users.get(current.reports_to)
         return chain
 
-    # ── Evaluation ───────────────────────────────────────────────────
-
-    def can(self, user: User | str, action: str, resource: str) -> bool:
-        """Check if user has permission. O(1) set lookup after resolution."""
-        if isinstance(user, str):
-            user = self._users[user]
-
-        # 1. Exclusions always win (admin override)
-        if action in user.exclusions.get(resource, set()):
-            return False
-
-        # 2. Explicit grants
-        if action in user.grants.get(resource, set()):
-            return True
-
-        # 3. Role-based
-        for role_name in user.roles:
-            role = self._roles[role_name]
-            if action in role.effective_permissions.get(resource, set()):
-                return True
-
-        return False
-
-    def get_effective_permissions(self, user: User | str) -> dict[str, set]:
-        """Get full permission map: resource -> set of allowed actions."""
-        if isinstance(user, str):
-            user = self._users[user]
-
-        perms: dict[str, set] = {}
-
-        # Collect from roles
-        for role_name in user.roles:
-            role = self._roles[role_name]
-            for r, actions in role.effective_permissions.items():
-                perms.setdefault(r, set()).update(actions)
-
-        # Add grants
-        for r, actions in user.grants.items():
-            perms.setdefault(r, set()).update(actions)
-
-        # Remove exclusions
-        for r, actions in user.exclusions.items():
-            if r in perms:
-                perms[r] -= actions
-                if not perms[r]:
-                    del perms[r]
-
-        return perms
-
-    # ── UI Export ────────────────────────────────────────────────────
-
-    def export_ui_manifest(self, user: User | str) -> dict:
-        """
-        Export a flat permission manifest for frontend consumption.
-        Frontend can use this to show/hide UI elements without calling backend.
-
-        Returns:
-        {
-          "user": "bob",
-          "display_name": "Bob Smith",
-          "roles": ["team_lead"],
-          "permissions": {
-            "dashboard": {"read": true, "manage": true},
-            "reports":   {"read": true, "create": true, "update": true, "delete": true, "upload": true},
-            ...
-          }
-        }
-        """
-        if isinstance(user, str):
-            user = self._users[user]
-
-        effective = self.get_effective_permissions(user)
-        permissions = {}
-        for r_name, resource in self._resources.items():
-            action_map = {}
-            user_actions = effective.get(r_name, set())
-            for action in resource.allowed_actions:
-                action_map[action] = action in user_actions
-            permissions[r_name] = action_map
-
-        return {
-            "user": user.id,
-            "display_name": user.display_name,
-            "roles": user.roles,
-            "permissions": permissions,
-        }
-
-    def export_all_manifests(self) -> dict:
-        """Export permission manifests for all users (for admin panel)."""
-        return {uid: self.export_ui_manifest(uid) for uid in self._users}
-
-    def export_role_matrix(self) -> dict:
-        """Export the full role-resource-action matrix for UI role editor."""
-        matrix = {}
-        for role_name, role in self._roles.items():
-            role_perms = {}
-            for r_name, resource in self._resources.items():
-                action_map = {}
-                effective_actions = role.effective_permissions.get(r_name, set())
-                direct_actions = role.direct_permissions.get(r_name, set())
-                for action in resource.allowed_actions:
-                    if action in direct_actions:
-                        action_map[action] = "direct"
-                    elif action in effective_actions:
-                        action_map[action] = "inherited"
-                    else:
-                        action_map[action] = False
-                role_perms[r_name] = action_map
-            matrix[role_name] = {
-                "description": role.description,
-                "inherits": role.inherits,
-                "permissions": role_perms,
-            }
-        return matrix
-
     # ── Introspection ────────────────────────────────────────────────
 
-    def explain(self, user: User | str, action: str, resource: str) -> str:
-        """Human-readable explanation of why user can/cannot do action:resource."""
-        if isinstance(user, str):
-            user = self._users[user]
+    def explain(self, user_id: str, action: str, resource: str, project_id: str | None = None) -> str:
+        user = self._users.get(user_id)
+        if not user:
+            return f"Unknown user '{user_id}'"
 
         perm_key = f"{action}:{resource}"
+        resource_obj = self._resources.get(resource)
+        if not resource_obj:
+            return f"Unknown resource '{resource}'"
 
-        # Check exclusion
-        if action in user.exclusions.get(resource, set()):
-            return f"{user.id} CANNOT {perm_key} -- excluded by admin override"
+        if resource_obj.scope == "subscription":
+            if not user.subscription_role:
+                return f"{user_id} CANNOT {perm_key} -- no subscription role"
+            role = self._roles.get(user.subscription_role)
+            if role and action in role.effective_permissions.get(resource, set()):
+                return f"{user_id} CAN {perm_key} -- subscription role '{user.subscription_role}'"
+            return f"{user_id} CANNOT {perm_key} -- subscription role '{user.subscription_role}' does not include this"
 
-        # Check grant
-        if action in user.grants.get(resource, set()):
-            return f"{user.id} CAN {perm_key} -- explicitly granted"
+        if not project_id:
+            return f"{user_id} CANNOT {perm_key} -- project_id required for project-scoped resource"
 
-        # Check roles
-        for role_name in user.roles:
-            role = self._roles[role_name]
-            if action in role.direct_permissions.get(resource, set()):
-                return f"{user.id} CAN {perm_key} -- direct permission from role '{role_name}'"
-            if action in role.effective_permissions.get(resource, set()):
-                return f"{user.id} CAN {perm_key} -- inherited via role '{role_name}'"
+        proj_exclusions = user.exclusions.get(project_id, {})
+        if action in proj_exclusions.get(resource, set()):
+            return f"{user_id} CANNOT {perm_key} in {project_id} -- excluded by admin override"
 
-        return f"{user.id} CANNOT {perm_key} -- no role grants this"
+        proj_grants = user.grants.get(project_id, {})
+        if action in proj_grants.get(resource, set()):
+            return f"{user_id} CAN {perm_key} in {project_id} -- explicitly granted"
+
+        assignment = user.project_assignments.get(project_id)
+        if not assignment:
+            return f"{user_id} CANNOT {perm_key} in {project_id} -- not assigned to this project"
+
+        role = self._roles.get(assignment.role)
+        if role and action in role.effective_permissions.get(resource, set()):
+            return f"{user_id} CAN {perm_key} in {project_id} -- project role '{assignment.role}'"
+
+        return f"{user_id} CANNOT {perm_key} in {project_id} -- role '{assignment.role}' does not include this"
 
     def get_dependency_chain(self, action: str, resource: str) -> list[str]:
-        """Get transitive dependencies for an action:resource permission."""
         deps = self._resolve_perm_deps(action, resource)
         result = []
         for r, actions in sorted(deps.items()):
@@ -353,8 +402,6 @@ class RBACEngine:
         return result
 
     def get_user(self, user_id: str) -> User:
-        if user_id not in self._users:
-            raise ValueError(f"Unknown user '{user_id}'")
         return self._users[user_id]
 
     def list_users(self) -> dict[str, User]:
