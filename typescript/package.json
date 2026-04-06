@@ -1,0 +1,17 @@
+{
+  "name": "@rbac/engine",
+  "version": "2.0.0",
+  "description": "Cross-language RBAC Permission Framework - TypeScript SDK",
+  "main": "dist/rbac-engine.js",
+  "types": "dist/rbac-engine.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "demo": "npx ts-node demo.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0"
+  },
+  "license": "MIT"
+}

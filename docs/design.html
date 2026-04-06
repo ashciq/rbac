@@ -285,6 +285,8 @@
     <a href="#cross-lang">Cross-Language</a>
     <a href="#api">API Reference</a>
     <a href="#security">Security</a>
+    <a href="#sdks">SDKs</a>
+    <a href="#database">Database</a>
   </div>
 </nav>
 
@@ -1038,6 +1040,219 @@ function ReportActions({ manifest }) {
          a safety valve to remove even inherited permissions for specific users.</p>
     </div>
   </div>
+</section>
+
+<!-- SDKs -->
+<section id="sdks">
+  <h2>SDK Implementations</h2>
+  <p>Every SDK loads the same <span class="inline-code">rbac_model.json</span> and implements
+     identical resolution logic. The output of <span class="inline-code">can()</span> and
+     <span class="inline-code">exportUIManifest()</span> is guaranteed to match across languages.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <h4>Python SDK <span class="badge badge-green">Reference</span></h4>
+      <p>Full implementation with RBACEngine, dependency resolution, cycle detection, UI export.
+         Zero dependencies beyond stdlib.</p>
+      <pre><code>from python.engine import RBACEngine
+
+engine = RBACEngine("schema/rbac_model.json")
+engine.can("bob", "delete", "users")  # False
+engine.export_ui_manifest("bob")      # JSON dict</code></pre>
+    </div>
+    <div class="card">
+      <h4>TypeScript SDK <span class="badge badge-blue">Browser + Node</span></h4>
+      <p>Full TypeScript implementation with type safety. Works in browser (load config via fetch)
+         and Node.js (load from filesystem).</p>
+      <pre><code>import { RBACEngine } from './rbac-engine';
+
+// Node.js
+const config = JSON.parse(fs.readFileSync('rbac_model.json'));
+const engine = new RBACEngine(config);
+
+// Browser
+const resp = await fetch('/api/rbac-config');
+const engine = RBACEngine.fromJSON(await resp.text());
+
+engine.can('bob', 'delete', 'users');  // false
+engine.exportUIManifest('bob');         // UIManifest</code></pre>
+    </div>
+    <div class="card">
+      <h4>Go SDK <span class="badge badge-yellow">Backend</span></h4>
+      <p>Idiomatic Go implementation with exported types and error returns.
+         Suitable for middleware integration in HTTP servers.</p>
+      <pre><code>import "rbac-go/rbac"
+
+engine, err := rbac.NewEngineFromFile("rbac_model.json")
+
+allowed, _ := engine.Can("bob", "delete", "users") // false
+manifest, _ := engine.ExportUIManifest("bob")       // *UIManifest</code></pre>
+    </div>
+  </div>
+
+  <h3>SDK API Surface (All Languages)</h3>
+  <table>
+    <tr><th>Method</th><th>Python</th><th>TypeScript</th><th>Go</th></tr>
+    <tr>
+      <td>Check permission</td>
+      <td><span class="inline-code">engine.can(user, action, resource)</span></td>
+      <td><span class="inline-code">engine.can(userId, action, resource)</span></td>
+      <td><span class="inline-code">engine.Can(userID, action, resource)</span></td>
+    </tr>
+    <tr>
+      <td>UI manifest</td>
+      <td><span class="inline-code">engine.export_ui_manifest(user)</span></td>
+      <td><span class="inline-code">engine.exportUIManifest(userId)</span></td>
+      <td><span class="inline-code">engine.ExportUIManifest(userID)</span></td>
+    </tr>
+    <tr>
+      <td>Effective permissions</td>
+      <td><span class="inline-code">engine.get_effective_permissions(user)</span></td>
+      <td><span class="inline-code">engine.getEffectivePermissions(userId)</span></td>
+      <td><span class="inline-code">engine.GetEffectivePermissions(userID)</span></td>
+    </tr>
+    <tr>
+      <td>Explain decision</td>
+      <td><span class="inline-code">engine.explain(user, action, resource)</span></td>
+      <td><span class="inline-code">engine.explain(userId, action, resource)</span></td>
+      <td><span class="inline-code">engine.Explain(userID, action, resource)</span></td>
+    </tr>
+    <tr>
+      <td>Role matrix</td>
+      <td><span class="inline-code">engine.export_role_matrix()</span></td>
+      <td><span class="inline-code">engine.exportRoleMatrix()</span></td>
+      <td><em>planned</em></td>
+    </tr>
+    <tr>
+      <td>Subordinates</td>
+      <td><span class="inline-code">engine.get_subordinates(uid)</span></td>
+      <td><span class="inline-code">engine.getSubordinates(userId)</span></td>
+      <td><span class="inline-code">engine.GetSubordinates(userID, recursive)</span></td>
+    </tr>
+    <tr>
+      <td>Management chain</td>
+      <td><span class="inline-code">engine.get_management_chain(uid)</span></td>
+      <td><span class="inline-code">engine.getManagementChain(userId)</span></td>
+      <td><span class="inline-code">engine.GetManagementChain(userID)</span></td>
+    </tr>
+  </table>
+</section>
+
+<!-- DATABASE -->
+<section id="database">
+  <h2>Database Integration</h2>
+  <p>Production deployments store RBAC data in a database instead of JSON files.
+     Scripts are provided for <strong>PostgreSQL</strong>, <strong>MySQL</strong>, and <strong>MongoDB</strong>
+     &mdash; each with schema, seed data, and helper functions that mirror the SDK API.</p>
+
+  <h3>Database Schema (All Databases)</h3>
+  <div class="diagram">
+  +-------------+     +------------------+     +-----------+
+  |  resources  |     | resource_actions  |     |  actions  |
+  +------+------+     +--------+---------+     +-----+-----+
+         |                     |                      |
+         +----------+----------+----------+-----------+
+                    |                     |
+              +-----+------+       +-----+------+
+              | permissions |       | perm_deps  |
+              +-----+------+       +------------+
+                    |
+              +-----+------+
+              |    roles    |
+              +-----+------+
+                    |
+          +---------+---------+
+          |                   |
+  +-------+--------+  +------+----------+
+  | role_inheritance|  |   user_roles    |
+  +----------------+  +------+----------+
+                             |
+                       +-----+------+
+                       |   users    |
+                       +--+-----+--+
+                          |     |
+                +---------+     +---------+
+                |                         |
+        +-------+-------+      +---------+--------+
+        |  user_grants  |      | user_exclusions  |
+        +---------------+      +------------------+</div>
+
+  <h3>PostgreSQL</h3>
+  <pre><code># Setup
+createdb rbac
+psql rbac < database/postgresql/001_schema.sql
+psql rbac < database/postgresql/002_seed.sql
+psql rbac < database/postgresql/003_queries.sql
+
+# Usage
+SELECT can_user('bob', 'delete', 'users');          -- FALSE (excluded)
+SELECT can_user('alice', 'manage', 'users');         -- TRUE
+SELECT * FROM get_effective_permissions('bob');       -- all perms with source
+SELECT export_ui_manifest('bob');                     -- JSON for frontend
+SELECT * FROM get_subordinates('alice');              -- org tree
+SELECT * FROM get_management_chain('eve');            -- chain to root
+SELECT * FROM v_user_permission_audit WHERE username = 'bob';  -- audit view</code></pre>
+
+  <div class="callout callout-info">
+    <strong>PostgreSQL Features:</strong> Stored functions (<span class="inline-code">can_user()</span>,
+    <span class="inline-code">export_ui_manifest()</span>), recursive CTEs for role inheritance and
+    org hierarchy, JSONB export for UI manifests, and a materialized audit view.
+  </div>
+
+  <h3>MySQL</h3>
+  <pre><code># Setup
+mysql < database/mysql/001_schema.sql
+mysql rbac_db < database/mysql/002_seed.sql
+mysql rbac_db < database/mysql/003_queries.sql
+
+# Usage (MySQL 8.0+)
+SELECT can_user('bob', 'delete', 'users');     -- 0 (FALSE)
+CALL get_effective_permissions('bob');           -- result set
+CALL get_subordinates('alice', TRUE);           -- recursive
+CALL get_management_chain('eve');               -- chain to root</code></pre>
+
+  <h3>MongoDB</h3>
+  <pre><code># Setup
+mongosh < database/mongodb/001_setup.js
+
+# Queries (in mongosh)
+load("database/mongodb/002_queries.js")
+
+# Or use the functions directly:
+canUser("bob", "delete", "users")            // false
+getEffectivePermissions("bob")               // { resource: [actions] }
+exportUIManifest("bob")                      // UI manifest object
+getSubordinates("alice")                     // org tree via $graphLookup
+getManagementChain("eve")                    // chain via $graphLookup</code></pre>
+
+  <div class="callout callout-success">
+    <strong>MongoDB Features:</strong> Document-oriented schema (roles and permissions are embedded),
+    <span class="inline-code">$graphLookup</span> for role inheritance and org hierarchy traversal,
+    aggregation pipelines for reporting.
+  </div>
+
+  <h3>Database Selection Guide</h3>
+  <table>
+    <tr><th>Database</th><th>Best For</th><th>Key Feature</th><th>Hierarchy Support</th></tr>
+    <tr>
+      <td>PostgreSQL</td>
+      <td>Enterprise, complex queries, audit compliance</td>
+      <td>Stored functions, JSONB export, materialized views</td>
+      <td>Recursive CTEs</td>
+    </tr>
+    <tr>
+      <td>MySQL</td>
+      <td>Web applications, existing MySQL infrastructure</td>
+      <td>Stored procedures, functions (8.0+ required for CTEs)</td>
+      <td>Recursive CTEs (8.0+)</td>
+    </tr>
+    <tr>
+      <td>MongoDB</td>
+      <td>Microservices, flexible schema, rapid prototyping</td>
+      <td>Embedded documents, $graphLookup, aggregation</td>
+      <td>$graphLookup</td>
+    </tr>
+  </table>
 </section>
 
 </div>
