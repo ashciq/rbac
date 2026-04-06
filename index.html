@@ -1,5 +1,68 @@
 <!DOCTYPE html>
-<html>
-<head><meta http-equiv="refresh" content="0; url=docs/design.html"></head>
-<body><a href="docs/design.html">RBAC Design Document</a></body>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RBAC Permission Framework</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0a0a1a;
+    color: white;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+  }
+  h1 { font-size: 3em; margin-bottom: 12px; }
+  .subtitle { font-size: 1.2em; opacity: 0.7; margin-bottom: 50px; text-align: center; max-width: 600px; }
+  .cards { display: flex; gap: 32px; flex-wrap: wrap; justify-content: center; }
+  .card {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 1px solid #2a2a4a;
+    border-radius: 16px;
+    padding: 40px;
+    width: 400px;
+    text-decoration: none;
+    color: white;
+    transition: all 0.3s;
+  }
+  .card:hover { transform: translateY(-6px); box-shadow: 0 12px 40px rgba(0,0,0,0.4); }
+  .card h2 { font-size: 1.5em; margin-bottom: 12px; }
+  .card p { opacity: 0.75; line-height: 1.6; margin-bottom: 16px; }
+  .card .tag {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8em;
+    font-weight: 600;
+  }
+  .card-enterprise { border-top: 4px solid #0f3460; }
+  .card-enterprise .tag { background: #0f3460; }
+  .card-ciq { border-top: 4px solid #e67e22; }
+  .card-ciq .tag { background: #d35400; }
+  .version { margin-top: 40px; opacity: 0.4; font-size: 0.9em; }
+  .version a { color: #74b9ff; text-decoration: none; }
+</style>
+</head>
+<body>
+  <h1>RBAC Framework</h1>
+  <p class="subtitle">Cross-language, hierarchical permission management with dependency resolution, composite roles, and UI-exportable manifests</p>
+  <div class="cards">
+    <a href="docs/enterprise.html" class="card card-enterprise">
+      <h2>Enterprise RBAC</h2>
+      <p>How the framework works for any enterprise. Architecture, core concepts, 11 standardized actions, role hierarchies, UI integration, cross-language SDKs, database support, and industry use cases.</p>
+      <span class="tag">Generic / All Industries</span>
+    </a>
+    <a href="docs/constructiviq.html" class="card card-ciq">
+      <h2>ConstructivIQ Implementation</h2>
+      <p>How RBAC applies to construction project management. 27 resources, 12 industry roles, multi-company collaboration, submittal workflows, migration plan from legacy permissions, and React integration.</p>
+      <span class="tag">Construction / CIQ Specific</span>
+    </a>
+  </div>
+  <p class="version">v3.0 &mdash; <a href="https://github.com/ashciq/rbac">GitHub Repository</a></p>
+</body>
 </html>
