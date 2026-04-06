@@ -1,0 +1,155 @@
+{
+  "version": "2.0",
+
+  "actions": ["read", "create", "update", "delete", "upload", "manage"],
+
+  "resources": {
+    "dashboard":  { "description": "Analytics dashboard",      "allowed_actions": ["read", "manage"] },
+    "reports":    { "description": "Business reports",         "allowed_actions": ["read", "create", "update", "delete", "upload"] },
+    "projects":   { "description": "Project workspaces",       "allowed_actions": ["read", "create", "update", "delete"] },
+    "users":      { "description": "User accounts",            "allowed_actions": ["read", "create", "update", "delete", "manage"] },
+    "settings":   { "description": "System settings",          "allowed_actions": ["read", "update", "manage"] },
+    "files":      { "description": "File storage",             "allowed_actions": ["read", "create", "delete", "upload"] },
+    "audit_logs": { "description": "Audit trail",              "allowed_actions": ["read", "delete"] }
+  },
+
+  "permission_dependencies": {
+    "delete:reports":   ["read:reports"],
+    "update:reports":   ["read:reports"],
+    "upload:reports":   ["read:reports", "create:reports"],
+    "manage:dashboard": ["read:dashboard"],
+    "delete:projects":  ["read:projects", "update:projects"],
+    "manage:users":     ["read:users", "create:users", "update:users"],
+    "manage:settings":  ["read:settings", "update:settings"],
+    "delete:files":     ["read:files"],
+    "upload:files":     ["read:files", "create:files"],
+    "delete:audit_logs":["read:audit_logs"]
+  },
+
+  "roles": {
+    "viewer": {
+      "description": "Read-only access to non-sensitive resources",
+      "inherits": [],
+      "permissions": {
+        "dashboard":  ["read"],
+        "reports":    ["read"],
+        "projects":   ["read"],
+        "files":      ["read"]
+      }
+    },
+    "contributor": {
+      "description": "Can create and edit content",
+      "inherits": ["viewer"],
+      "permissions": {
+        "reports":  ["create", "update"],
+        "projects": ["create", "update"],
+        "files":    ["create", "upload"]
+      }
+    },
+    "editor": {
+      "description": "Full content management including deletion",
+      "inherits": ["contributor"],
+      "permissions": {
+        "reports":  ["delete", "upload"],
+        "projects": ["delete"],
+        "files":    ["delete"]
+      }
+    },
+    "user_manager": {
+      "description": "Can manage user accounts",
+      "inherits": [],
+      "permissions": {
+        "users": ["read", "create", "update"]
+      }
+    },
+    "team_lead": {
+      "description": "Editor + user read access + dashboard management",
+      "inherits": ["editor", "user_manager"],
+      "permissions": {
+        "dashboard":  ["manage"],
+        "audit_logs": ["read"]
+      }
+    },
+    "admin": {
+      "description": "Full system access",
+      "inherits": ["team_lead"],
+      "permissions": {
+        "users":      ["delete", "manage"],
+        "settings":   ["read", "update", "manage"],
+        "audit_logs": ["delete"],
+        "files":      ["upload"]
+      }
+    },
+    "auditor": {
+      "description": "Read-only access to everything including audit logs",
+      "inherits": ["viewer"],
+      "permissions": {
+        "users":      ["read"],
+        "settings":   ["read"],
+        "audit_logs": ["read"]
+      }
+    }
+  },
+
+  "users": {
+    "alice": {
+      "display_name": "Alice Johnson",
+      "roles": ["admin"],
+      "grants": {},
+      "exclusions": {},
+      "reports_to": null
+    },
+    "bob": {
+      "display_name": "Bob Smith",
+      "roles": ["team_lead"],
+      "grants": {},
+      "exclusions": {
+        "users": ["delete"]
+      },
+      "reports_to": "alice"
+    },
+    "carol": {
+      "display_name": "Carol Williams",
+      "roles": ["editor"],
+      "grants": {
+        "audit_logs": ["read"]
+      },
+      "exclusions": {},
+      "reports_to": "bob"
+    },
+    "dave": {
+      "display_name": "Dave Brown",
+      "roles": ["contributor"],
+      "grants": {},
+      "exclusions": {
+        "reports": ["delete"]
+      },
+      "reports_to": "bob"
+    },
+    "eve": {
+      "display_name": "Eve Davis",
+      "roles": ["viewer"],
+      "grants": {},
+      "exclusions": {},
+      "reports_to": "carol"
+    },
+    "frank": {
+      "display_name": "Frank Miller",
+      "roles": ["auditor"],
+      "grants": {},
+      "exclusions": {},
+      "reports_to": "alice"
+    },
+    "grace": {
+      "display_name": "Grace Wilson",
+      "roles": ["contributor", "user_manager"],
+      "grants": {
+        "settings": ["read"]
+      },
+      "exclusions": {
+        "files": ["upload"]
+      },
+      "reports_to": "bob"
+    }
+  }
+}

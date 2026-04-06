@@ -1,0 +1,367 @@
+import json
+from pathlib import Path
+
+from .exceptions import (
+    CyclicDependencyError,
+    UnknownPermissionError,
+    UnknownRoleError,
+)
+from .models import Resource, Role, User
+
+
+class RBACEngine:
+    """
+    Core RBAC engine supporting:
+    - Resource-action permission matrix (read, create, update, delete, upload, manage)
+    - Permission dependencies (delete:reports requires read:reports)
+    - Role inheritance + composition (team_lead = editor + user_manager)
+    - Per-user grants and exclusions (admin can strip permissions)
+    - Org hierarchy (reports_to chain, manager inherits subordinate scope)
+    - UI-exportable permission manifest
+    """
+
+    def __init__(self, config_path: str | Path):
+        self._config = self._load_config(config_path)
+        self._actions: list[str] = self._config["actions"]
+        self._resources: dict[str, Resource] = {}
+        self._perm_deps: dict[str, list[str]] = {}
+        self._roles: dict[str, Role] = {}
+        self._users: dict[str, User] = {}
+
+        self._build_resources()
+        self._build_perm_deps()
+        self._build_roles()
+        self._resolve_all_roles()
+        self._build_users()
+
+    # ── Loading ──────────────────────────────────────────────────────
+
+    def _load_config(self, path: str | Path) -> dict:
+        with open(Path(path)) as f:
+            return json.load(f)
+
+    def _build_resources(self):
+        for name, info in self._config["resources"].items():
+            self._resources[name] = Resource(
+                name=name,
+                description=info.get("description", ""),
+                allowed_actions=info["allowed_actions"],
+            )
+
+    def _build_perm_deps(self):
+        for perm_key, deps in self._config.get("permission_dependencies", {}).items():
+            self._validate_perm_key(perm_key)
+            for dep in deps:
+                self._validate_perm_key(dep)
+            self._perm_deps[perm_key] = deps
+
+    def _build_roles(self):
+        raw_roles = self._config["roles"]
+        for name, info in raw_roles.items():
+            for parent in info.get("inherits", []):
+                if parent not in raw_roles:
+                    raise UnknownRoleError(f"Role '{name}' inherits unknown role '{parent}'")
+            direct = {}
+            for resource, actions in info.get("permissions", {}).items():
+                if resource not in self._resources:
+                    raise UnknownPermissionError(f"Role '{name}' references unknown resource '{resource}'")
+                direct[resource] = set(actions)
+            self._roles[name] = Role(
+                name=name,
+                description=info.get("description", ""),
+                inherits=info.get("inherits", []),
+                direct_permissions=direct,
+            )
+
+    def _build_users(self):
+        for uid, info in self._config.get("users", {}).items():
+            for role_name in info.get("roles", []):
+                if role_name not in self._roles:
+                    raise UnknownRoleError(f"User '{uid}' has unknown role '{role_name}'")
+            grants = {r: set(a) for r, a in info.get("grants", {}).items()}
+            exclusions = {r: set(a) for r, a in info.get("exclusions", {}).items()}
+            reports_to = info.get("reports_to")
+            if reports_to and reports_to not in self._config.get("users", {}):
+                raise ValueError(f"User '{uid}' reports_to unknown user '{reports_to}'")
+            self._users[uid] = User(
+                id=uid,
+                display_name=info.get("display_name", uid),
+                roles=info.get("roles", []),
+                grants=grants,
+                exclusions=exclusions,
+                reports_to=reports_to,
+            )
+
+    def _validate_perm_key(self, key: str):
+        parts = key.split(":", 1)
+        if len(parts) != 2:
+            raise UnknownPermissionError(f"Invalid permission format '{key}', expected 'action:resource'")
+        action, resource = parts
+        if resource not in self._resources:
+            raise UnknownPermissionError(f"Unknown resource '{resource}' in permission '{key}'")
+
+    # ── Dependency Resolution ────────────────────────────────────────
+
+    def _resolve_perm_deps(self, action: str, resource: str, ancestors=None, cache=None):
+        """Resolve transitive dependencies for a single action:resource."""
+        key = f"{action}:{resource}"
+        if cache is None:
+            cache = {}
+        if ancestors is None:
+            ancestors = set()
+
+        if key in cache:
+            return cache[key]
+        if key in ancestors:
+            raise CyclicDependencyError(f"Cycle in permission dependencies involving '{key}'")
+
+        new_ancestors = ancestors | {key}
+        # result is dict: resource -> set of actions
+        result = {resource: {action}}
+
+        for dep_key in self._perm_deps.get(key, []):
+            dep_action, dep_resource = dep_key.split(":", 1)
+            sub = self._resolve_perm_deps(dep_action, dep_resource, new_ancestors, cache)
+            for r, actions in sub.items():
+                result.setdefault(r, set()).update(actions)
+
+        cache[key] = result
+        return result
+
+    def _resolve_role_perms(self, role_name: str, ancestors=None, cache=None):
+        """Resolve effective permissions for a role (inheritance + deps)."""
+        if cache is None:
+            cache = {}
+        if ancestors is None:
+            ancestors = set()
+
+        if role_name in cache:
+            return cache[role_name]
+        if role_name in ancestors:
+            raise CyclicDependencyError(f"Cycle in role inheritance involving '{role_name}'")
+
+        new_ancestors = ancestors | {role_name}
+        role = self._roles[role_name]
+        merged: dict[str, set] = {}
+
+        # Inherited roles
+        for parent in role.inherits:
+            parent_perms = self._resolve_role_perms(parent, new_ancestors, cache)
+            for r, actions in parent_perms.items():
+                merged.setdefault(r, set()).update(actions)
+
+        # Direct permissions
+        for r, actions in role.direct_permissions.items():
+            merged.setdefault(r, set()).update(actions)
+
+        # Expand dependencies for every collected permission
+        dep_cache = {}
+        expanded: dict[str, set] = {}
+        for r, actions in merged.items():
+            for action in actions:
+                deps = self._resolve_perm_deps(action, r, cache=dep_cache)
+                for dep_r, dep_actions in deps.items():
+                    expanded.setdefault(dep_r, set()).update(dep_actions)
+
+        cache[role_name] = expanded
+        return expanded
+
+    def _resolve_all_roles(self):
+        cache = {}
+        for role_name in self._roles:
+            self._roles[role_name].effective_permissions = self._resolve_role_perms(
+                role_name, cache=cache
+            )
+
+    # ── Hierarchy ────────────────────────────────────────────────────
+
+    def get_subordinates(self, user_id: str, recursive=True) -> list[str]:
+        """Get direct (or all recursive) subordinates of a user."""
+        direct = [uid for uid, u in self._users.items() if u.reports_to == user_id]
+        if not recursive:
+            return direct
+        result = []
+        for sub in direct:
+            result.append(sub)
+            result.extend(self.get_subordinates(sub, recursive=True))
+        return result
+
+    def get_management_chain(self, user_id: str) -> list[str]:
+        """Get the chain of managers from user up to root."""
+        chain = []
+        current = self._users.get(user_id)
+        visited = set()
+        while current and current.reports_to:
+            if current.reports_to in visited:
+                break
+            visited.add(current.reports_to)
+            chain.append(current.reports_to)
+            current = self._users.get(current.reports_to)
+        return chain
+
+    # ── Evaluation ───────────────────────────────────────────────────
+
+    def can(self, user: User | str, action: str, resource: str) -> bool:
+        """Check if user has permission. O(1) set lookup after resolution."""
+        if isinstance(user, str):
+            user = self._users[user]
+
+        # 1. Exclusions always win (admin override)
+        if action in user.exclusions.get(resource, set()):
+            return False
+
+        # 2. Explicit grants
+        if action in user.grants.get(resource, set()):
+            return True
+
+        # 3. Role-based
+        for role_name in user.roles:
+            role = self._roles[role_name]
+            if action in role.effective_permissions.get(resource, set()):
+                return True
+
+        return False
+
+    def get_effective_permissions(self, user: User | str) -> dict[str, set]:
+        """Get full permission map: resource -> set of allowed actions."""
+        if isinstance(user, str):
+            user = self._users[user]
+
+        perms: dict[str, set] = {}
+
+        # Collect from roles
+        for role_name in user.roles:
+            role = self._roles[role_name]
+            for r, actions in role.effective_permissions.items():
+                perms.setdefault(r, set()).update(actions)
+
+        # Add grants
+        for r, actions in user.grants.items():
+            perms.setdefault(r, set()).update(actions)
+
+        # Remove exclusions
+        for r, actions in user.exclusions.items():
+            if r in perms:
+                perms[r] -= actions
+                if not perms[r]:
+                    del perms[r]
+
+        return perms
+
+    # ── UI Export ────────────────────────────────────────────────────
+
+    def export_ui_manifest(self, user: User | str) -> dict:
+        """
+        Export a flat permission manifest for frontend consumption.
+        Frontend can use this to show/hide UI elements without calling backend.
+
+        Returns:
+        {
+          "user": "bob",
+          "display_name": "Bob Smith",
+          "roles": ["team_lead"],
+          "permissions": {
+            "dashboard": {"read": true, "manage": true},
+            "reports":   {"read": true, "create": true, "update": true, "delete": true, "upload": true},
+            ...
+          }
+        }
+        """
+        if isinstance(user, str):
+            user = self._users[user]
+
+        effective = self.get_effective_permissions(user)
+        permissions = {}
+        for r_name, resource in self._resources.items():
+            action_map = {}
+            user_actions = effective.get(r_name, set())
+            for action in resource.allowed_actions:
+                action_map[action] = action in user_actions
+            permissions[r_name] = action_map
+
+        return {
+            "user": user.id,
+            "display_name": user.display_name,
+            "roles": user.roles,
+            "permissions": permissions,
+        }
+
+    def export_all_manifests(self) -> dict:
+        """Export permission manifests for all users (for admin panel)."""
+        return {uid: self.export_ui_manifest(uid) for uid in self._users}
+
+    def export_role_matrix(self) -> dict:
+        """Export the full role-resource-action matrix for UI role editor."""
+        matrix = {}
+        for role_name, role in self._roles.items():
+            role_perms = {}
+            for r_name, resource in self._resources.items():
+                action_map = {}
+                effective_actions = role.effective_permissions.get(r_name, set())
+                direct_actions = role.direct_permissions.get(r_name, set())
+                for action in resource.allowed_actions:
+                    if action in direct_actions:
+                        action_map[action] = "direct"
+                    elif action in effective_actions:
+                        action_map[action] = "inherited"
+                    else:
+                        action_map[action] = False
+                role_perms[r_name] = action_map
+            matrix[role_name] = {
+                "description": role.description,
+                "inherits": role.inherits,
+                "permissions": role_perms,
+            }
+        return matrix
+
+    # ── Introspection ────────────────────────────────────────────────
+
+    def explain(self, user: User | str, action: str, resource: str) -> str:
+        """Human-readable explanation of why user can/cannot do action:resource."""
+        if isinstance(user, str):
+            user = self._users[user]
+
+        perm_key = f"{action}:{resource}"
+
+        # Check exclusion
+        if action in user.exclusions.get(resource, set()):
+            return f"{user.id} CANNOT {perm_key} -- excluded by admin override"
+
+        # Check grant
+        if action in user.grants.get(resource, set()):
+            return f"{user.id} CAN {perm_key} -- explicitly granted"
+
+        # Check roles
+        for role_name in user.roles:
+            role = self._roles[role_name]
+            if action in role.direct_permissions.get(resource, set()):
+                return f"{user.id} CAN {perm_key} -- direct permission from role '{role_name}'"
+            if action in role.effective_permissions.get(resource, set()):
+                return f"{user.id} CAN {perm_key} -- inherited via role '{role_name}'"
+
+        return f"{user.id} CANNOT {perm_key} -- no role grants this"
+
+    def get_dependency_chain(self, action: str, resource: str) -> list[str]:
+        """Get transitive dependencies for an action:resource permission."""
+        deps = self._resolve_perm_deps(action, resource)
+        result = []
+        for r, actions in sorted(deps.items()):
+            for a in sorted(actions):
+                key = f"{a}:{r}"
+                if key != f"{action}:{resource}":
+                    result.append(key)
+        return result
+
+    def get_user(self, user_id: str) -> User:
+        if user_id not in self._users:
+            raise ValueError(f"Unknown user '{user_id}'")
+        return self._users[user_id]
+
+    def list_users(self) -> dict[str, User]:
+        return dict(self._users)
+
+    def list_roles(self) -> dict[str, Role]:
+        return dict(self._roles)
+
+    def list_resources(self) -> dict[str, Resource]:
+        return dict(self._resources)

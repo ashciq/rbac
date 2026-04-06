@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RBAC Model v2",
+  "description": "Language-agnostic RBAC configuration with resource-action matrix, composite roles, user hierarchy, and admin exclusions",
+  "type": "object",
+  "required": ["version", "actions", "resources", "roles"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "actions": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z_]+$" },
+      "uniqueItems": true
+    },
+    "resources": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z_]+$": {
+          "type": "object",
+          "required": ["allowed_actions"],
+          "properties": {
+            "description": { "type": "string" },
+            "allowed_actions": {
+              "type": "array",
+              "items": { "type": "string" },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "permission_dependencies": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z_]+:[a-z_]+$": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z_]+:[a-z_]+$" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "roles": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z_]+$": {
+          "type": "object",
+          "required": ["inherits", "permissions"],
+          "properties": {
+            "description": { "type": "string" },
+            "inherits": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "permissions": {
+              "type": "object",
+              "patternProperties": {
+                "^[a-z_]+$": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "uniqueItems": true
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "users": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z_]+$": {
+          "type": "object",
+          "required": ["roles"],
+          "properties": {
+            "display_name": { "type": "string" },
+            "roles": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "grants": {
+              "type": "object",
+              "patternProperties": {
+                "^[a-z_]+$": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            },
+            "exclusions": {
+              "type": "object",
+              "patternProperties": {
+                "^[a-z_]+$": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            },
+            "reports_to": {
+              "type": ["string", "null"]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
