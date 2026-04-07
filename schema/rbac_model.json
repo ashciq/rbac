@@ -7,537 +7,218 @@
     "archive", "manage"
   ],
 
-  "scopes": {
-    "subscription": {
-      "description": "Organization/subscription-level permissions"
-    },
-    "project": {
-      "description": "Project-level permissions (scoped per project)"
-    }
-  },
-
   "resources": {
+    "dashboard": {
+      "description": "Analytics dashboard",
+      "allowed_actions": ["read", "manage"]
+    },
+    "orders": {
+      "description": "Customer orders",
+      "allowed_actions": ["read", "list", "create", "update", "delete", "download", "approve", "assign", "archive"]
+    },
+    "invoices": {
+      "description": "Financial invoices",
+      "allowed_actions": ["read", "list", "create", "update", "delete", "download", "approve"]
+    },
+    "reports": {
+      "description": "Business reports",
+      "allowed_actions": ["read", "list", "create", "update", "delete", "upload", "download"]
+    },
+    "documents": {
+      "description": "Document storage",
+      "allowed_actions": ["read", "list", "create", "update", "delete", "upload", "download", "archive"]
+    },
     "projects": {
-      "description": "Construction projects",
-      "scope": "subscription",
+      "description": "Project workspaces",
       "allowed_actions": ["read", "list", "create", "update", "delete", "archive", "manage"]
     },
-    "project_settings": {
-      "description": "Project configuration, timezone, details",
-      "scope": "project",
-      "allowed_actions": ["read", "update", "manage"]
-    },
-    "submittals": {
-      "description": "Submittal log entries",
-      "scope": "project",
-      "allowed_actions": ["read", "list", "create", "update", "delete", "upload", "download", "approve", "assign", "archive"]
-    },
-    "materials": {
-      "description": "Material tracking entries",
-      "scope": "project",
-      "allowed_actions": ["read", "list", "create", "update", "delete", "upload", "download", "approve", "assign", "archive"]
-    },
-    "material_dateblock": {
-      "description": "Material date block offsets, projected/actual/planned dates",
-      "scope": "project",
-      "allowed_actions": ["read", "update"]
-    },
-    "material_characteristics": {
-      "description": "Material characteristics and properties",
-      "scope": "project",
-      "allowed_actions": ["read", "update"]
-    },
-    "material_templates": {
-      "description": "Material date block templates",
-      "scope": "project",
-      "allowed_actions": ["read", "create", "update", "delete", "manage"]
-    },
-    "material_comments": {
-      "description": "Comments on materials",
-      "scope": "project",
-      "allowed_actions": ["read", "create", "delete"]
-    },
-    "bid_packages": {
-      "description": "Bid packages for procurement",
-      "scope": "project",
-      "allowed_actions": ["read", "list", "create", "update", "delete"]
-    },
-    "design_packages": {
-      "description": "Design packages",
-      "scope": "project",
-      "allowed_actions": ["read", "list", "create", "update", "delete"]
-    },
-    "schedules": {
-      "description": "Project schedules and activities",
-      "scope": "project",
-      "allowed_actions": ["read", "list", "create", "update", "delete", "upload", "manage"]
-    },
-    "attachments": {
-      "description": "File attachments on submittals and materials",
-      "scope": "project",
-      "allowed_actions": ["read", "upload", "download", "delete"]
-    },
-    "spec_sections": {
-      "description": "Specification section files",
-      "scope": "project",
-      "allowed_actions": ["read", "upload", "delete"]
-    },
-    "workflows": {
-      "description": "Submittal and material workflows",
-      "scope": "project",
-      "allowed_actions": ["read", "update", "approve", "manage"]
-    },
-    "workflow_templates": {
-      "description": "Workflow template configuration",
-      "scope": "project",
-      "allowed_actions": ["read", "create", "update", "delete", "manage"]
-    },
-    "project_users": {
-      "description": "Users assigned to a project",
-      "scope": "project",
+    "users": {
+      "description": "User accounts",
       "allowed_actions": ["read", "list", "create", "update", "delete", "assign", "manage"]
     },
-    "trade_partners": {
-      "description": "Trade partner / subcontractor companies",
-      "scope": "project",
-      "allowed_actions": ["read", "list", "create", "update", "delete"]
-    },
-    "distribution_groups": {
-      "description": "Notification distribution groups",
-      "scope": "project",
-      "allowed_actions": ["read", "list", "create", "update", "delete"]
-    },
-    "calendars": {
-      "description": "Project calendars and holidays",
-      "scope": "project",
-      "allowed_actions": ["read", "create", "update", "delete", "manage"]
-    },
-    "locations": {
-      "description": "Location breakdown structure (LBS)",
-      "scope": "project",
-      "allowed_actions": ["read", "create", "update", "delete"]
-    },
-    "linking": {
-      "description": "Linking between submittals, materials, and schedule activities",
-      "scope": "project",
-      "allowed_actions": ["read", "create", "update", "delete"]
-    },
-    "risk_reports": {
-      "description": "Risk analysis reports",
-      "scope": "project",
-      "allowed_actions": ["read", "download", "manage"]
-    },
-    "risk_thresholds": {
-      "description": "Risk threshold configuration",
-      "scope": "project",
-      "allowed_actions": ["read", "update"]
-    },
-    "custom_reports": {
-      "description": "Custom report configurations",
-      "scope": "project",
-      "allowed_actions": ["read", "create", "update", "delete", "manage"]
-    },
-    "saved_views": {
-      "description": "Saved grid/filter views",
-      "scope": "project",
-      "allowed_actions": ["read", "create", "update", "delete", "manage"]
-    },
-    "integrations": {
-      "description": "External integrations (Autodesk ACC, Procore, CMiC)",
-      "scope": "project",
-      "allowed_actions": ["read", "create", "update", "delete", "manage"]
-    },
-    "lead_time_requests": {
-      "description": "Lead time requests to subcontractors",
-      "scope": "project",
-      "allowed_actions": ["read", "create", "approve"]
-    },
-    "audit_logs": {
-      "description": "System audit trail",
-      "scope": "subscription",
-      "allowed_actions": ["read", "list", "download"]
-    },
-    "subscription_users": {
-      "description": "Subscription-level user management",
-      "scope": "subscription",
-      "allowed_actions": ["read", "list", "create", "update", "delete", "manage"]
-    },
-    "subscription_settings": {
-      "description": "Subscription configuration and billing",
-      "scope": "subscription",
+    "settings": {
+      "description": "System settings",
       "allowed_actions": ["read", "update", "manage"]
     },
-    "companies": {
-      "description": "Company/organization management",
-      "scope": "subscription",
-      "allowed_actions": ["read", "list", "create", "update", "delete"]
+    "audit_logs": {
+      "description": "Audit trail",
+      "allowed_actions": ["read", "list", "download"]
     }
   },
 
   "permission_dependencies": {
-    "manage:projects":             ["read:projects", "list:projects", "create:projects", "update:projects"],
-    "manage:project_settings":     ["read:project_settings", "update:project_settings"],
-    "delete:submittals":           ["read:submittals", "list:submittals"],
-    "approve:submittals":          ["read:submittals"],
-    "assign:submittals":           ["read:submittals", "list:submittals"],
-    "upload:submittals":           ["read:submittals"],
-    "archive:submittals":          ["read:submittals", "list:submittals"],
-    "delete:materials":            ["read:materials", "list:materials"],
-    "approve:materials":           ["read:materials"],
-    "assign:materials":            ["read:materials", "list:materials"],
-    "upload:materials":            ["read:materials"],
-    "archive:materials":           ["read:materials", "list:materials"],
-    "update:material_dateblock":   ["read:material_dateblock"],
-    "update:material_characteristics": ["read:material_characteristics"],
-    "manage:material_templates":   ["read:material_templates", "create:material_templates", "update:material_templates"],
-    "manage:schedules":            ["read:schedules", "list:schedules", "upload:schedules"],
-    "upload:attachments":          ["read:attachments"],
-    "delete:attachments":          ["read:attachments"],
-    "manage:workflows":            ["read:workflows", "update:workflows"],
-    "manage:workflow_templates":   ["read:workflow_templates", "create:workflow_templates", "update:workflow_templates"],
-    "manage:project_users":        ["read:project_users", "list:project_users", "create:project_users", "assign:project_users"],
-    "manage:calendars":            ["read:calendars", "create:calendars", "update:calendars"],
-    "manage:risk_reports":         ["read:risk_reports", "download:risk_reports"],
-    "manage:custom_reports":       ["read:custom_reports", "create:custom_reports", "update:custom_reports"],
-    "manage:saved_views":          ["read:saved_views", "create:saved_views", "update:saved_views"],
-    "manage:integrations":         ["read:integrations", "create:integrations", "update:integrations"],
-    "manage:subscription_users":   ["read:subscription_users", "list:subscription_users", "create:subscription_users", "update:subscription_users"],
-    "manage:subscription_settings":["read:subscription_settings", "update:subscription_settings"]
+    "manage:dashboard":  ["read:dashboard"],
+    "delete:orders":     ["read:orders", "list:orders"],
+    "approve:orders":    ["read:orders"],
+    "assign:orders":     ["read:orders", "list:orders"],
+    "archive:orders":    ["read:orders", "list:orders"],
+    "download:orders":   ["read:orders"],
+    "delete:invoices":   ["read:invoices", "list:invoices"],
+    "approve:invoices":  ["read:invoices"],
+    "download:invoices": ["read:invoices"],
+    "upload:reports":    ["read:reports", "create:reports"],
+    "download:reports":  ["read:reports"],
+    "delete:reports":    ["read:reports", "list:reports"],
+    "upload:documents":  ["read:documents", "create:documents"],
+    "download:documents":["read:documents"],
+    "delete:documents":  ["read:documents", "list:documents"],
+    "archive:documents": ["read:documents", "list:documents"],
+    "manage:projects":   ["read:projects", "list:projects", "create:projects", "update:projects"],
+    "archive:projects":  ["read:projects", "list:projects"],
+    "manage:users":      ["read:users", "list:users", "create:users", "update:users"],
+    "assign:users":      ["read:users", "list:users"],
+    "manage:settings":   ["read:settings", "update:settings"],
+    "download:audit_logs":["read:audit_logs", "list:audit_logs"]
   },
 
   "roles": {
-    "subscription_viewer": {
-      "description": "Read-only access at subscription level",
-      "scope": "subscription",
+    "viewer": {
+      "description": "Read-only access across the system",
       "inherits": [],
       "permissions": {
-        "projects":               ["read", "list"],
-        "subscription_users":     ["read", "list"],
-        "subscription_settings":  ["read"],
-        "companies":              ["read", "list"],
-        "audit_logs":             ["read", "list"]
+        "dashboard":  ["read"],
+        "orders":     ["read", "list"],
+        "invoices":   ["read", "list"],
+        "reports":    ["read", "list"],
+        "documents":  ["read", "list"],
+        "projects":   ["read", "list"]
       }
     },
-    "subscription_editor": {
-      "description": "Can edit subscription resources but not full admin",
-      "scope": "subscription",
-      "inherits": ["subscription_viewer"],
+    "contributor": {
+      "description": "Can create and edit content",
+      "inherits": ["viewer"],
       "permissions": {
-        "projects":               ["create", "update"],
-        "subscription_users":     ["create", "update"],
-        "companies":              ["create", "update"]
+        "orders":     ["create", "update"],
+        "reports":    ["create", "update"],
+        "documents":  ["create", "update", "upload", "download"]
       }
     },
-    "subscription_admin": {
-      "description": "Full subscription management",
-      "scope": "subscription",
-      "inherits": ["subscription_editor"],
+    "editor": {
+      "description": "Full content management including deletion and downloads",
+      "inherits": ["contributor"],
       "permissions": {
-        "projects":               ["delete", "archive", "manage"],
-        "subscription_users":     ["delete", "manage"],
-        "subscription_settings":  ["update", "manage"],
-        "companies":              ["delete"],
-        "audit_logs":             ["download"]
+        "orders":     ["delete", "download", "archive"],
+        "invoices":   ["create", "update", "download"],
+        "reports":    ["delete", "upload", "download"],
+        "documents":  ["delete", "archive"]
       }
     },
-
-    "gc_project_admin": {
-      "description": "General Contractor Project Admin - full project control",
-      "scope": "project",
-      "user_type": "general_contractor",
+    "approver": {
+      "description": "Can approve orders and invoices",
       "inherits": [],
       "permissions": {
-        "project_settings":          ["read", "update", "manage"],
-        "submittals":                ["read", "list", "create", "update", "delete", "upload", "download", "approve", "assign", "archive"],
-        "materials":                 ["read", "list", "create", "update", "delete", "upload", "download", "approve", "assign", "archive"],
-        "material_dateblock":        ["read", "update"],
-        "material_characteristics":  ["read", "update"],
-        "material_templates":        ["read", "create", "update", "delete", "manage"],
-        "material_comments":         ["read", "create", "delete"],
-        "bid_packages":              ["read", "list", "create", "update", "delete"],
-        "design_packages":           ["read", "list", "create", "update", "delete"],
-        "schedules":                 ["read", "list", "create", "update", "delete", "upload", "manage"],
-        "attachments":               ["read", "upload", "download", "delete"],
-        "spec_sections":             ["read", "upload", "delete"],
-        "workflows":                 ["read", "update", "approve", "manage"],
-        "workflow_templates":        ["read", "create", "update", "delete", "manage"],
-        "project_users":             ["read", "list", "create", "update", "delete", "assign", "manage"],
-        "trade_partners":            ["read", "list", "create", "update", "delete"],
-        "distribution_groups":       ["read", "list", "create", "update", "delete"],
-        "calendars":                 ["read", "create", "update", "delete", "manage"],
-        "locations":                 ["read", "create", "update", "delete"],
-        "linking":                   ["read", "create", "update", "delete"],
-        "risk_reports":              ["read", "download", "manage"],
-        "risk_thresholds":           ["read", "update"],
-        "custom_reports":            ["read", "create", "update", "delete", "manage"],
-        "saved_views":               ["read", "create", "update", "delete", "manage"],
-        "integrations":              ["read", "create", "update", "delete", "manage"],
-        "lead_time_requests":        ["read", "create", "approve"]
+        "orders":     ["read", "list", "approve"],
+        "invoices":   ["read", "list", "approve"]
       }
     },
-    "gc_foreman": {
-      "description": "General Contractor Foreman - view + limited field actions",
-      "scope": "project",
-      "user_type": "general_contractor",
+    "user_manager": {
+      "description": "Can manage user accounts",
       "inherits": [],
       "permissions": {
-        "project_settings":          ["read"],
-        "submittals":                ["read", "list", "download"],
-        "materials":                 ["read", "list", "download"],
-        "material_dateblock":        ["read"],
-        "material_characteristics":  ["read"],
-        "material_templates":        ["read"],
-        "material_comments":         ["read", "create"],
-        "bid_packages":              ["read", "list"],
-        "design_packages":           ["read", "list"],
-        "schedules":                 ["read", "list"],
-        "attachments":               ["read", "download"],
-        "spec_sections":             ["read"],
-        "workflows":                 ["read"],
-        "workflow_templates":        ["read"],
-        "project_users":             ["read", "list"],
-        "trade_partners":            ["read", "list"],
-        "distribution_groups":       ["read", "list"],
-        "linking":                   ["read"],
-        "risk_reports":              ["read", "download"],
-        "custom_reports":            ["read"],
-        "saved_views":               ["read"]
+        "users":      ["read", "list", "create", "update", "assign"]
       }
     },
-
-    "sc_project_admin": {
-      "description": "Subcontractor Project Admin - manage SC scope",
-      "scope": "project",
-      "user_type": "subcontractor",
-      "inherits": [],
+    "manager": {
+      "description": "Editor + approver + user management + reporting",
+      "inherits": ["editor", "approver", "user_manager"],
       "permissions": {
-        "project_settings":          ["read"],
-        "submittals":                ["read", "list", "upload", "download", "approve"],
-        "materials":                 ["read", "list", "upload", "download", "approve"],
-        "material_dateblock":        ["read", "update"],
-        "material_characteristics":  ["read", "update"],
-        "material_templates":        ["read"],
-        "material_comments":         ["read", "create"],
-        "bid_packages":              ["read", "list"],
-        "design_packages":           ["read", "list"],
-        "schedules":                 ["read", "list"],
-        "attachments":               ["read", "upload", "download", "delete"],
-        "spec_sections":             ["read"],
-        "workflows":                 ["read", "update", "approve"],
-        "project_users":             ["read", "list", "create"],
-        "trade_partners":            ["read", "list", "create"],
-        "distribution_groups":       ["read", "list"],
-        "linking":                   ["read"],
-        "risk_reports":              ["read"],
-        "custom_reports":            ["read"],
-        "saved_views":               ["read", "create"]
+        "dashboard":   ["manage"],
+        "projects":    ["create", "update", "archive"],
+        "audit_logs":  ["read", "list"]
       }
     },
-    "sc_foreman": {
-      "description": "Subcontractor Foreman - limited view access",
-      "scope": "project",
-      "user_type": "subcontractor",
-      "inherits": [],
+    "admin": {
+      "description": "Full system access",
+      "inherits": ["manager"],
       "permissions": {
-        "project_settings":          ["read"],
-        "submittals":                ["read", "list", "download"],
-        "materials":                 ["read", "list", "download"],
-        "material_dateblock":        ["read"],
-        "material_characteristics":  ["read"],
-        "material_comments":         ["read", "create"],
-        "attachments":               ["read", "download"],
-        "workflows":                 ["read"],
-        "project_users":             ["read", "list"],
-        "linking":                   ["read"],
-        "saved_views":               ["read"]
+        "users":       ["delete", "manage"],
+        "settings":    ["read", "update", "manage"],
+        "projects":    ["delete", "manage"],
+        "audit_logs":  ["download"],
+        "invoices":    ["delete"]
       }
     },
-
-    "architect": {
-      "description": "Architect - design review and approval",
-      "scope": "project",
-      "user_type": "architect",
-      "inherits": [],
+    "auditor": {
+      "description": "Read-only access to everything including audit trail",
+      "inherits": ["viewer"],
       "permissions": {
-        "project_settings":          ["read"],
-        "submittals":                ["read", "list", "upload", "download", "approve"],
-        "materials":                 ["read", "list", "download"],
-        "material_comments":         ["read", "create"],
-        "design_packages":           ["read", "list"],
-        "attachments":               ["read", "upload", "download"],
-        "workflows":                 ["read", "update", "approve"],
-        "project_users":             ["read", "list", "create"],
-        "linking":                   ["read"],
-        "saved_views":               ["read"]
-      }
-    },
-    "design_engineer": {
-      "description": "Design Engineer - engineering review and approval",
-      "scope": "project",
-      "user_type": "engineer",
-      "inherits": [],
-      "permissions": {
-        "project_settings":          ["read"],
-        "submittals":                ["read", "list", "upload", "download", "approve"],
-        "materials":                 ["read", "list", "download"],
-        "material_comments":         ["read", "create"],
-        "design_packages":           ["read", "list"],
-        "attachments":               ["read", "upload", "download"],
-        "workflows":                 ["read", "update", "approve"],
-        "project_users":             ["read", "list", "create"],
-        "linking":                   ["read"],
-        "saved_views":               ["read"]
-      }
-    },
-    "owner": {
-      "description": "Project Owner - oversight and approval",
-      "scope": "project",
-      "user_type": "owner",
-      "inherits": [],
-      "permissions": {
-        "project_settings":          ["read"],
-        "submittals":                ["read", "list", "download", "approve"],
-        "materials":                 ["read", "list", "download", "approve"],
-        "material_comments":         ["read", "create"],
-        "attachments":               ["read", "download"],
-        "workflows":                 ["read", "approve"],
-        "project_users":             ["read", "list"],
-        "risk_reports":              ["read", "download"],
-        "saved_views":               ["read"]
-      }
-    },
-
-    "gc_sc_project_admin": {
-      "description": "GC-managed Subcontractor Admin",
-      "scope": "project",
-      "user_type": "subcontractor",
-      "managed_by": "general_contractor",
-      "inherits": ["sc_project_admin"],
-      "permissions": {
-        "spec_sections":             ["upload"],
-        "material_dateblock":        ["update"],
-        "custom_reports":            ["create", "update", "manage"]
-      }
-    },
-    "gc_sc_foreman": {
-      "description": "GC-managed Subcontractor Foreman",
-      "scope": "project",
-      "user_type": "subcontractor",
-      "managed_by": "general_contractor",
-      "inherits": ["sc_foreman"],
-      "permissions": {}
-    },
-    "gc_sc_architect": {
-      "description": "GC-managed Architect",
-      "scope": "project",
-      "user_type": "architect",
-      "managed_by": "general_contractor",
-      "inherits": ["architect"],
-      "permissions": {}
-    },
-    "gc_sc_design_engineer": {
-      "description": "GC-managed Design Engineer",
-      "scope": "project",
-      "user_type": "engineer",
-      "managed_by": "general_contractor",
-      "inherits": ["design_engineer"],
-      "permissions": {}
-    },
-    "gc_sc_owner": {
-      "description": "GC-managed Owner representative",
-      "scope": "project",
-      "user_type": "owner",
-      "managed_by": "general_contractor",
-      "inherits": ["owner"],
-      "permissions": {
-        "material_comments":         ["create"]
+        "users":       ["read", "list"],
+        "settings":    ["read"],
+        "audit_logs":  ["read", "list", "download"],
+        "invoices":    ["read", "list", "download"],
+        "orders":      ["download"],
+        "reports":     ["download"],
+        "documents":   ["download"]
       }
     }
   },
 
   "users": {
-    "sarah": {
-      "display_name": "Sarah Chen",
-      "email": "sarah@constructiviq.com",
-      "subscription_role": "subscription_admin",
-      "project_assignments": {
-        "project_alpha": { "role": "gc_project_admin" },
-        "project_beta": { "role": "gc_project_admin" }
-      },
+    "alice": {
+      "display_name": "Alice Johnson",
+      "email": "alice@company.com",
+      "roles": ["admin"],
       "grants": {},
       "exclusions": {},
       "reports_to": null
     },
-    "mike": {
-      "display_name": "Mike Johnson",
-      "email": "mike@constructiviq.com",
-      "subscription_role": "subscription_editor",
-      "project_assignments": {
-        "project_alpha": { "role": "gc_foreman" }
-      },
-      "grants": {},
-      "exclusions": {},
-      "reports_to": "sarah"
-    },
-    "priya": {
-      "display_name": "Priya Patel",
-      "email": "priya@tradepartner.com",
-      "subscription_role": null,
-      "project_assignments": {
-        "project_alpha": { "role": "sc_project_admin" }
-      },
-      "grants": {},
-      "exclusions": {},
-      "reports_to": null
-    },
-    "james": {
-      "display_name": "James Wilson",
-      "email": "james@tradepartner.com",
-      "subscription_role": null,
-      "project_assignments": {
-        "project_alpha": { "role": "sc_foreman" }
-      },
+    "bob": {
+      "display_name": "Bob Smith",
+      "email": "bob@company.com",
+      "roles": ["manager"],
       "grants": {},
       "exclusions": {
-        "project_alpha": { "materials": ["download"] }
+        "users": ["delete"]
       },
-      "reports_to": "priya"
+      "reports_to": "alice"
     },
-    "lisa": {
-      "display_name": "Lisa Thompson",
-      "email": "lisa@architectfirm.com",
-      "subscription_role": null,
-      "project_assignments": {
-        "project_alpha": { "role": "architect" },
-        "project_beta": { "role": "gc_sc_architect" }
-      },
+    "carol": {
+      "display_name": "Carol Williams",
+      "email": "carol@company.com",
+      "roles": ["editor"],
       "grants": {
-        "project_alpha": { "risk_reports": ["download"] }
+        "audit_logs": ["read", "list"]
       },
       "exclusions": {},
-      "reports_to": null
+      "reports_to": "bob"
     },
-    "raj": {
-      "display_name": "Raj Kumar",
-      "email": "raj@engineeringfirm.com",
-      "subscription_role": null,
-      "project_assignments": {
-        "project_alpha": { "role": "design_engineer" }
+    "dave": {
+      "display_name": "Dave Brown",
+      "email": "dave@company.com",
+      "roles": ["contributor"],
+      "grants": {},
+      "exclusions": {
+        "orders": ["delete"]
       },
+      "reports_to": "bob"
+    },
+    "eve": {
+      "display_name": "Eve Davis",
+      "email": "eve@company.com",
+      "roles": ["viewer"],
       "grants": {},
       "exclusions": {},
-      "reports_to": null
+      "reports_to": "carol"
     },
-    "tom": {
-      "display_name": "Tom Davis",
-      "email": "tom@ownercorp.com",
-      "subscription_role": null,
-      "project_assignments": {
-        "project_alpha": { "role": "owner" }
-      },
+    "frank": {
+      "display_name": "Frank Miller",
+      "email": "frank@company.com",
+      "roles": ["auditor"],
       "grants": {},
       "exclusions": {},
-      "reports_to": null
+      "reports_to": "alice"
+    },
+    "grace": {
+      "display_name": "Grace Wilson",
+      "email": "grace@company.com",
+      "roles": ["contributor", "approver"],
+      "grants": {
+        "settings": ["read"]
+      },
+      "exclusions": {
+        "documents": ["upload"]
+      },
+      "reports_to": "bob"
     }
   }
 }

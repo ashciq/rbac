@@ -5,24 +5,18 @@ from dataclasses import dataclass, field
 class Resource:
     name: str
     description: str
-    scope: str  # "subscription" or "project"
     allowed_actions: list
 
     def __repr__(self):
-        return f"Resource({self.name}, scope={self.scope})"
+        return f"Resource({self.name}, actions={self.allowed_actions})"
 
 
 @dataclass
 class Role:
     name: str
     description: str
-    scope: str  # "subscription" or "project"
-    user_type: str  # e.g., "general_contractor", "subcontractor"
-    managed_by: str  # e.g., "general_contractor" for gc_sc_ roles
     inherits: list
-    # resource -> set of actions directly assigned
     direct_permissions: dict = field(default_factory=dict)
-    # resource -> set of actions after resolving inheritance + deps
     effective_permissions: dict = field(default_factory=dict)
 
     def has(self, action: str, resource: str) -> bool:
@@ -34,23 +28,13 @@ class Role:
 
 
 @dataclass
-class ProjectAssignment:
-    project_id: str
-    role: str
-
-
-@dataclass
 class User:
     id: str
     display_name: str
-    email: str
-    subscription_role: str | None
-    project_assignments: dict = field(default_factory=dict)  # project_id -> ProjectAssignment
-    # project_id -> {resource -> set of actions}
+    roles: list
     grants: dict = field(default_factory=dict)
-    # project_id -> {resource -> set of actions}
     exclusions: dict = field(default_factory=dict)
     reports_to: str | None = None
 
     def __repr__(self):
-        return f"User({self.id}, sub_role={self.subscription_role}, projects={list(self.project_assignments.keys())})"
+        return f"User({self.id}, roles={self.roles})"
